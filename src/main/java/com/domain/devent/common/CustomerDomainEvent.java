@@ -1,7 +1,5 @@
 package com.domain.devent.common;
 
-import com.domain.devent.eunm.EventType;
-
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
