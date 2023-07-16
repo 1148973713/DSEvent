@@ -16,19 +16,26 @@ import java.util.function.Consumer;
 public class ConsumerHandler implements WorkHandler<CustomerDomainEvent<DomainEvent>> {
 
     private final HashMap<String, ReplyHandler> handlerHashMap = new HashMap<>();
+
+    private final HashMap<String, Boolean> hasErrorHashMap = new HashMap<>();
+
     //监听到传过来的类和方法
     @Override
     public void onEvent(CustomerDomainEvent<DomainEvent> customerDomainEvent) {
         String eventId = customerDomainEvent.getEventId();
         DomainEvent event = customerDomainEvent.getEvent();
         Consumer<DomainEvent> compensateConsumer = customerDomainEvent.getCompensateConsumer();
-
-        try {
-            customerDomainEvent.getCommandConsumer().accept(event);
-            getReply(customerDomainEvent, eventId, event, compensateConsumer, false);
-        } catch (Exception e) {
-            if (customerDomainEvent.getCompensateConsumer() != null) {
-                getReply(customerDomainEvent, eventId, event, compensateConsumer, true);
+        Boolean result = hasErrorHashMap.get(eventId);
+        if (result == null || !result) {
+            try {
+                hasErrorHashMap.put(eventId, false);
+                customerDomainEvent.getCommandConsumer().accept(event);
+                getReply(customerDomainEvent, eventId, event, compensateConsumer, false);
+            } catch (Exception e) {
+                hasErrorHashMap.replace(eventId, true);
+                if (customerDomainEvent.getCompensateConsumer() != null) {
+                    getReply(customerDomainEvent, eventId, event, compensateConsumer, true);
+                }
             }
         }
     }
@@ -42,7 +49,7 @@ public class ConsumerHandler implements WorkHandler<CustomerDomainEvent<DomainEv
             replyHandler = handlerHashMap.get(eventId);
         } else {
             replyHandler = new ReplyHandler();
-            handlerHashMap.put(eventId,replyHandler);
+            handlerHashMap.put(eventId, replyHandler);
         }
         eventDisruptor.handleEventsWithWorkerPool(replyHandler);
         //运行事件
@@ -53,7 +60,7 @@ public class ConsumerHandler implements WorkHandler<CustomerDomainEvent<DomainEv
         CustomerDomainEvent<DomainEvent> domainEventCustomerDomainEvent = ringBuffer.get(sequence);
 
         Long eventCreateDate = customerDomainEvent.getEventCreateDate();
-        CompensateEvent compensateEvent = new CompensateEvent(event,compensateConsumer,eventCreateDate);
+        CompensateEvent compensateEvent = new CompensateEvent(event, compensateConsumer, eventCreateDate);
 
         //放入数组中
         domainEventCustomerDomainEvent.setEvent(event);
